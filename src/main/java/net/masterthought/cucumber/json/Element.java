@@ -1,17 +1,13 @@
 package net.masterthought.cucumber.json;
 
-import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 
-import net.masterthought.cucumber.ConfigurationOptions;
 import net.masterthought.cucumber.json.support.Status;
 import net.masterthought.cucumber.json.support.StatusCounter;
-import net.masterthought.cucumber.util.Util;
 
 public class Element {
 
     // Start: attributes from JSON file report
-    private final String id = null;
     private final String name = null;
     private final String type = null;
     private final String description = null;
@@ -22,12 +18,13 @@ public class Element {
     private final Tag[] tags = new Tag[0];
     // End: attributes from JSON file report
 
-    private static final String[] SCENARIO_KEYWORDS = { "Scenario", "Scenario Outline" };
+    private static final String SCENARIO_TYPE = "scenario";
 
-    private String beforeAttachments;
-    private String afterAttachments;
+    private Status elementStatus;
+    private Status beforeStatus;
+    private Status afterStatus;
+    private Status stepsStatus;
 
-    private StatusCounter statusCounter;
     private Feature feature;
 
     public Step[] getSteps() {
@@ -46,44 +43,23 @@ public class Element {
         return tags;
     }
 
-    public String getBeforeAttachments() {
-        return beforeAttachments;
-    }
-
-    public String getAfterAttachments() {
-        return afterAttachments;
-    }
-
     public Status getStatus() {
-        if (statusCounter.getValueFor(Status.FAILED) > 0) {
-            return Status.FAILED;
-        }
-
-        ConfigurationOptions configuration = ConfigurationOptions.instance();
-        if (configuration.skippedFailsBuild() && statusCounter.getValueFor(Status.SKIPPED) > 0) {
-            return Status.FAILED;
-        }
-
-        if (configuration.pendingFailsBuild() && statusCounter.getValueFor(Status.PENDING) > 0) {
-            return Status.FAILED;
-        }
-
-        if (configuration.undefinedFailsBuild() && statusCounter.getValueFor(Status.UNDEFINED) > 0) {
-            return Status.FAILED;
-        }
-
-        if (configuration.missingFailsBuild() && statusCounter.getValueFor(Status.MISSING) > 0) {
-            return Status.FAILED;
-        }
-
-        return Status.PASSED;
+        return elementStatus;
     }
 
-    public String getId() {
-        return id;
+    public Status getBeforeStatus() {
+        return beforeStatus;
     }
 
-    public String getRawName() {
+    public Status getAfterStatus() {
+        return afterStatus;
+    }
+
+    public Status getStepsStatus() {
+        return stepsStatus;
+    }
+
+    public String getName() {
         return name;
     }
 
@@ -95,113 +71,49 @@ public class Element {
         return type;
     }
 
+    public String getDescription() {
+        return StringUtils.defaultString(description);
+    }
+
     public boolean isScenario() {
-        for (String reference : SCENARIO_KEYWORDS) {
-            if (reference.equals(keyword)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    public String getName() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("<div class=\"").append(getStatus().getName().toLowerCase()).append("\">");
-
-        if (StringUtils.isNotEmpty(keyword)) {
-            sb.append("<span class=\"element-keyword\">").append(StringEscapeUtils.escapeHtml(keyword))
-                    .append(": </span>");
-        }
-
-        if (StringUtils.isNotEmpty(name)) {
-            sb.append("<span class=\"element-name\">").append(StringEscapeUtils.escapeHtml(name)).append("</span>");
-        }
-        sb.append("</div>");
-
-        return sb.toString();
-    }
-
-    public boolean hasTags() {
-        return tags.length > 0;
-    }
-
-    public boolean hasSteps() {
-        return steps.length > 0;
-    }
-
-    public String getTagsList() {
-        return Util.tagsToHtml(tags);
+        return SCENARIO_TYPE.equals(type);
     }
 
     public Feature getFeature() {
         return feature;
     }
 
-    @Override
-    public int hashCode() {
-        return id != null ? id.hashCode() : super.hashCode();
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null) {
-            return false;
-        }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        Element other = (Element) obj;
-
-        return id != null ? id.equals(other.id) : super.equals(obj);
-    }
-
-    public void setMedaData(Feature feature) {
+    public void setMetaData(Feature feature) {
         this.feature = feature;
+
+        beforeStatus = calculateHookStatus(before);
+        afterStatus = calculateHookStatus(after);
+        stepsStatus = calculateStepsStatus();
+        elementStatus = calculateElementStatus();
+    }
+
+    private Status calculateHookStatus(Hook[] hooks) {
+        StatusCounter statusCounter = new StatusCounter();
+        for (Hook hook : hooks) {
+            statusCounter.incrementFor(hook.getResult().getStatus());
+        }
+
+        return statusCounter.getFinalStatus();
+    }
+
+    private Status calculateElementStatus() {
+        StatusCounter statusCounter = new StatusCounter();
+        statusCounter.incrementFor(stepsStatus);
+        statusCounter.incrementFor(beforeStatus);
+        statusCounter.incrementFor(afterStatus);
+        return statusCounter.getFinalStatus();
+    }
+
+    private Status calculateStepsStatus() {
+        StatusCounter statusCounter = new StatusCounter();
         for (Step step : steps) {
-            step.setMedaData(this);
+            statusCounter.incrementFor(step.getResult().getStatus());
         }
-        calculateStatus();
-        calculateHooks(before);
-        calculateHooks(after);
-        beforeAttachments = calculateAttachments("Before", before);
-        afterAttachments = calculateAttachments("After", after);
-    }
-
-    private void calculateStatus() {
-        statusCounter = new StatusCounter();
-        for (Step step : steps) {
-            statusCounter.incrementFor(step.getStatus());
-        }
-    }
-
-    private void calculateHooks(Hook[] hooks) {
-        for (int i = 0; i < hooks.length; i++) {
-            hooks[i].setMedaData();
-        }
-    }
-
-    private String calculateAttachments(String keyword, Hook[] hooks) {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < hooks.length; i++) {
-            String status = hooks[i].getResult().getStatus();
-
-            sb.append("<div class=\"").append(status).append("\">");
-            sb.append("<span class=\"step-keyword\">").append(keyword).append(" </span>");
-            sb.append("<i>").append(hooks[i].getMatch().getLocation()).append("</i>");
-
-            sb.append("<span class=\"step-duration\">");
-            if (Status.MISSING.getName().equals(status)) {
-                sb.append(Util.formatDuration(hooks[i].getResult().getDuration()));
-            }
-            sb.append("</span>");
-            sb.append(Util.formatErrorMessage(hooks[i].getResult().getErrorMessage(), hooks[i].getResult().hashCode()));
-            sb.append("</div>");
-
-            sb.append(hooks[i].getAttachments());
-        }
-        return sb.toString();
+        return statusCounter.getFinalStatus();
     }
 }

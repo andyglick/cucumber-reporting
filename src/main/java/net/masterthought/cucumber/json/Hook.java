@@ -1,16 +1,16 @@
 package net.masterthought.cucumber.json;
 
-import net.masterthought.cucumber.json.support.ResultsWithMatch;
+import net.masterthought.cucumber.json.support.Resultsable;
 
-public class Hook implements ResultsWithMatch {
+public class Hook implements Resultsable {
 
     // Start: attributes from JSON file report
     private final Result result = null;
     private final Match match = null;
-    private final Embedded[] embeddings = new Embedded[0];
-    // End: attributes from JSON file report
 
-    private String attachments;
+    // foe Ruby reports
+    private final Embedding[] embeddings = new Embedding[0];
+    // End: attributes from JSON file report
 
     @Override
     public Result getResult() {
@@ -22,26 +22,7 @@ public class Hook implements ResultsWithMatch {
         return match;
     }
 
-    @Override
-    public Embedded[] getEmbeddings() {
+    public Embedding[] getEmbeddings() {
         return embeddings;
     }
-
-    @Override
-    public String getAttachments() {
-        return attachments;
-    }
-    
-    public void setMedaData() {
-        calculateAttachments();
-    }
-
-    private void calculateAttachments() {
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < embeddings.length; i++) {
-            sb.append(embeddings[i].render(i));
-        }
-        attachments = sb.toString();
-    }
-
 }

@@ -1,104 +1,116 @@
 package net.masterthought.cucumber.generators;
 
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
+import java.io.Writer;
+import java.nio.charset.StandardCharsets;
 import java.util.Properties;
 
+import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.Template;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
-import org.apache.velocity.tools.generic.EscapeTool;
+import org.apache.velocity.app.event.EventCartridge;
+import org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader;
 
+import net.masterthought.cucumber.Configuration;
 import net.masterthought.cucumber.ReportBuilder;
-import net.masterthought.cucumber.ReportInformation;
-import net.masterthought.cucumber.VelocityContextMap;
+import net.masterthought.cucumber.ReportResult;
+import net.masterthought.cucumber.ValidationException;
+import net.masterthought.cucumber.util.Counter;
+import net.masterthought.cucumber.util.Util;
 
 /**
  * Delivers common methods for page generation.
- * 
- * @author Damian Szczepanik (damianszczepanik@github)
  *
+ * @author Damian Szczepanik (damianszczepanik@github)
  */
 public abstract class AbstractPage {
 
     private static final Logger LOG = LogManager.getLogger(AbstractPage.class);
 
-    protected final VelocityEngine ve = new VelocityEngine();
-    protected final VelocityContextMap contextMap = VelocityContextMap.of(new VelocityContext());
-    private Template template;
-    /** Name of the html file which will be generated. */
-    private final String fileName;
+    private final VelocityEngine engine = new VelocityEngine();
+    protected final VelocityContext context = new VelocityContext();
 
-    protected final ReportBuilder reportBuilder;
-    protected final ReportInformation reportInformation;
+    /** Name of the HTML file which will be generated. */
+    private final String templateFileName;
+    /** Results of the report. */
+    protected final ReportResult reportResult;
+    /** Configuration used for this report execution. */
+    protected final Configuration configuration;
 
-    protected AbstractPage(ReportBuilder reportBuilder, String fileName) {
-        this.reportBuilder = reportBuilder;
-        this.fileName = fileName;
-        this.reportInformation = reportBuilder.getReportInformation();
+    protected AbstractPage(ReportResult reportResult, String templateFileName, Configuration configuration) {
+        this.templateFileName = templateFileName;
+        this.reportResult = reportResult;
+        this.configuration = configuration;
+
+        this.engine.init(buildProperties());
+        buildGeneralParameters();
     }
 
-    public void generatePage() throws IOException {
-        ve.init(getProperties());
-        template = ve.getTemplate("templates/pages/" + fileName);
+    public void generatePage() {
+        prepareReport();
+        generateReport();
+    }
 
-        contextMap.clear();
-        contextMap.putAll(getGeneralParameters());
-        contextMap.put("esc", new EscapeTool());
+    /** Returns HTML file name (with extension) for this report. */
+    public abstract String getWebPage();
 
-        if (this instanceof ErrorPage) {
-            contextMap.put("time_stamp", new SimpleDateFormat("dd-MM-yyyy HH:mm:ss").format(new Date()));
-        } else {
-            contextMap.put("time_stamp", reportInformation.timeStamp());
+    protected abstract void prepareReport();
+
+    private void generateReport() {
+        context.put("report_file", getWebPage());
+
+        Template template = engine.getTemplate("templates/generators/" + templateFileName);
+        File reportFile = new File(configuration.getReportDirectory(),
+                ReportBuilder.BASE_DIRECTORY + File.separatorChar + getWebPage());
+        try (Writer writer = new OutputStreamWriter(new FileOutputStream(reportFile), StandardCharsets.UTF_8)) {
+            template.merge(context, writer);
+        } catch (IOException e) {
+            throw new ValidationException(e);
         }
     }
 
-    protected void generateReport(String fileName) throws IOException {
-        VelocityContext context = contextMap.getVelocityContext();
-        context.put("page_url", fileName);
-        File dir = new File(this.reportBuilder.getReportDirectory(), fileName);
-        try (FileOutputStream fileStream = new FileOutputStream(dir)) {
-            try (BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fileStream, "UTF8"))) {
-                template.merge(context, writer);
-            }
-        }
-    }
-
-    protected Properties getProperties() {
+    private Properties buildProperties() {
         Properties props = new Properties();
         props.setProperty("resource.loader", "class");
-        props.setProperty("class.resource.loader.class",
-                "org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader");
-        props.setProperty("runtime.log", new File(this.reportBuilder.getReportDirectory(), "velocity.log").getPath());
+        props.setProperty("class.resource.loader.class", ClasspathResourceLoader.class.getCanonicalName());
+        props.setProperty("runtime.log", new File(configuration.getReportDirectory(), "velocity.log").getPath());
 
         return props;
     }
 
-    protected Map<String, Object> getGeneralParameters() {
-        Map<String, Object> result = new HashMap<String, Object>();
-        result.put("jenkins_source", this.reportBuilder.isRunWithJenkins());
-        result.put("jenkins_base", this.reportBuilder.getPluginUrlPath());
-        result.put("build_project", this.reportBuilder.getBuildProject());
-        result.put("build_number", this.reportBuilder.getBuildNumber());
-        int previousBuildNumber = -1;
-        try {
-            previousBuildNumber = Integer.parseInt(this.reportBuilder.getBuildNumber());
-            previousBuildNumber--;
-        } catch (NumberFormatException e) {
-            LOG.error("Could not parse build number: {}.", this.reportBuilder.getBuildNumber(), e);
+    private void buildGeneralParameters() {
+        // to escape html and xml
+        EventCartridge ec = new EventCartridge();
+        ec.addEventHandler(new EscapeHtmlReference());
+        context.attachEventCartridge(ec);
+
+        // to provide unique ids for elements on each page
+        context.put("counter", new Counter());
+        context.put("util", Util.INSTANCE);
+
+        context.put("run_with_jenkins", configuration.isRunWithJenkins());
+        context.put("trends_present", configuration.getTrendsStatsFile() != null);
+        context.put("build_project_name", configuration.getProjectName());
+        context.put("build_number", configuration.getBuildNumber());
+
+        // if report generation fails then report is null
+        String formattedTime = reportResult != null ? reportResult.getBuildTime() : ReportResult.getCurrentTime();
+        context.put("build_time", formattedTime);
+
+        // build number is not mandatory
+        String buildNumber = configuration.getBuildNumber();
+        if (buildNumber != null) {
+            if (NumberUtils.isCreatable(buildNumber)) {
+                context.put("build_previous_number", Integer.parseInt(buildNumber) - 1);
+            } else {
+                LOG.info("Could not parse build number: {}.", configuration.getBuildNumber());
+            }
         }
-        result.put("build_previous_number", previousBuildNumber);
-
-        return result;
     }
-
 }

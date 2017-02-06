@@ -1,29 +1,27 @@
 package net.masterthought.cucumber.generators;
 
-import java.io.IOException;
-
-import net.masterthought.cucumber.ReportBuilder;
+import net.masterthought.cucumber.Configuration;
+import net.masterthought.cucumber.ReportResult;
 import net.masterthought.cucumber.json.Feature;
 
 public class FeatureReportPage extends AbstractPage {
 
-    public FeatureReportPage(ReportBuilder reportBuilder) {
-        super(reportBuilder, "featureReport.vm");
+    private final Feature feature;
+
+    public FeatureReportPage(ReportResult reportResult, Configuration configuration, Feature feature) {
+        super(reportResult, "reportFeature.vm", configuration);
+        this.feature = feature;
     }
 
     @Override
-    public void generatePage() throws IOException {
-        for (Feature feature : reportInformation.getAllFeatures()) {
-            super.generatePage();
+    public String getWebPage() {
+        return feature.getReportFileName();
+    }
 
-            contextMap.putAll(getGeneralParameters());
-            contextMap.put("parallel", ReportBuilder.isParallel());
-            contextMap.put("feature", feature);
-            contextMap.put("status_colour", feature.getStatus().color);
-            contextMap.put("elements", feature.getElements());
-
-            generateReport(feature.getReportFileName());
-        }
+    @Override
+    public void prepareReport() {
+        context.put("parallel", configuration.isParallelTesting());
+        context.put("feature", feature);
     }
 
 }

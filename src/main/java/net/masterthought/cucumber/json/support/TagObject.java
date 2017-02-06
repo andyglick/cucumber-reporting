@@ -3,11 +3,17 @@ package net.masterthought.cucumber.json.support;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.lang.NotImplementedException;
+import org.apache.commons.lang.StringUtils;
+
+import net.masterthought.cucumber.Reportable;
+import net.masterthought.cucumber.ValidationException;
 import net.masterthought.cucumber.json.Element;
 import net.masterthought.cucumber.json.Step;
+import net.masterthought.cucumber.json.Tag;
 import net.masterthought.cucumber.util.Util;
 
-public class TagObject {
+public class TagObject implements Reportable, Comparable<TagObject> {
 
     private final String tagName;
     private final List<Element> elements = new ArrayList<>();
@@ -19,17 +25,20 @@ public class TagObject {
     private long totalDuration;
     private int totalSteps;
 
-    /** Status for current tag: {@link Status#PASSED} if all elements pass {@link Status#FAILED} otherwise. */
+    /** Default status for current tag: {@link Status#PASSED} if all elements pass {@link Status#FAILED} otherwise. */
     private Status status = Status.PASSED;
 
     public TagObject(String tagName) {
+        if (StringUtils.isEmpty(tagName)) {
+            throw new ValidationException("TagName cannot be null!");
+        }
         this.tagName = tagName;
 
-        // eliminate characters that might be invalid as a file name
-        this.reportFileName = tagName.replace("@", "").replaceAll(":", "-").trim() + ".html";
+        this.reportFileName = Tag.generateFileName(tagName);
     }
 
-    public String getTagName() {
+    @Override
+    public String getName() {
         return tagName;
     }
 
@@ -37,12 +46,7 @@ public class TagObject {
         return reportFileName;
     }
 
-    public List<Element> getElements() {
-        return elements;
-    }
-
-
-    public void addElement(Element element) {
+    public boolean addElement(Element element) {
         elements.add(element);
 
         if (status != Status.FAILED && element.getStatus() != Status.PASSED) {
@@ -56,29 +60,59 @@ public class TagObject {
         elementsStatusCounter.incrementFor(element.getStatus());
 
         for (Step step : element.getSteps()) {
-            stepsStatusCounter.incrementFor(step.getStatus());
+            stepsStatusCounter.incrementFor(step.getResult().getStatus());
             totalDuration += step.getDuration();
             totalSteps++;
         }
+        return true;
     }
 
+    public List<Element> getElements() {
+        return elements;
+    }
+
+    @Override
+    public int getFeatures() {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public int getPassedFeatures() {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public int getFailedFeatures() {
+        throw new NotImplementedException();
+    }
+
+    @Override
     public int getScenarios() {
         return scenarioCounter;
     }
 
-    public Integer getNumberOfPassingScenarios() {
+    @Override
+    public int getPassedScenarios() {
         return elementsStatusCounter.getValueFor(Status.PASSED);
     }
 
-    public Integer getNumberOfFailingScenarios() {
+    @Override
+    public int getFailedScenarios() {
         return elementsStatusCounter.getValueFor(Status.FAILED);
     }
 
-    public String getTotalDuration() {
-        return Util.formatDuration(totalDuration);
+    @Override
+    public long getDurations() {
+        return totalDuration;
     }
 
-    public int getNumberOfSteps() {
+    @Override
+    public String getFormattedDurations() {
+        return Util.formatDuration(getDurations());
+    }
+
+    @Override
+    public int getSteps() {
         return totalSteps;
     }
 
@@ -86,41 +120,48 @@ public class TagObject {
         return stepsStatusCounter.getValueFor(status);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfPasses() {
+    @Override
+    public int getPassedSteps() {
         return getNumberOfStatus(Status.PASSED);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfFailures() {
+    @Override
+    public int getFailedSteps() {
         return getNumberOfStatus(Status.FAILED);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfSkipped() {
+    @Override
+    public int getSkippedSteps() {
         return getNumberOfStatus(Status.SKIPPED);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfUndefined() {
+    @Override
+    public int getUndefinedSteps() {
         return getNumberOfStatus(Status.UNDEFINED);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfMissing() {
-        return getNumberOfStatus(Status.MISSING);
+    @Override
+    public int getPendingSteps() {
+        return getNumberOfStatus(Status.PENDING);
     }
 
-    /** No-parameters method required for velocity template. */
-    public int getNumberOfPending() {
-        return getNumberOfStatus(Status.UNDEFINED);
-    }
-
+    @Override
     public Status getStatus() {
         return status;
     }
 
     public String getRawStatus() {
         return status.name().toLowerCase();
+    }
+
+    @Override
+    public String getDeviceName() {
+        throw new NotImplementedException();
+    }
+
+    @Override
+    public int compareTo(TagObject o) {
+        // since there might be the only one TagObject with given tagName, compare by location only
+        return Integer.signum(tagName.compareTo(o.getName()));
     }
 }

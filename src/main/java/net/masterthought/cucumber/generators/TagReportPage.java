@@ -1,26 +1,26 @@
 package net.masterthought.cucumber.generators;
 
-import java.io.IOException;
-
-import net.masterthought.cucumber.ReportBuilder;
+import net.masterthought.cucumber.Configuration;
+import net.masterthought.cucumber.ReportResult;
 import net.masterthought.cucumber.json.support.TagObject;
 
 public class TagReportPage extends AbstractPage {
 
-    public TagReportPage(ReportBuilder reportBuilder) {
-        super(reportBuilder, "tagReport.vm");
+    private final TagObject tagObject;
+
+    public TagReportPage(ReportResult reportResult, Configuration configuration, TagObject tagObject) {
+        super(reportResult, "reportTag.vm", configuration);
+        this.tagObject = tagObject;
     }
 
     @Override
-    public void generatePage() throws IOException {
-        for (TagObject tagObject : reportInformation.getAllTags()) {
-            super.generatePage();
+    public String getWebPage() {
+        return tagObject.getReportFileName();
+    }
 
-            contextMap.put("tag", tagObject);
-            contextMap.put("status_colour", tagObject.getStatus().color);
-
-            generateReport(tagObject.getReportFileName());
-        }
+    @Override
+    public void prepareReport() {
+        context.put("tag", tagObject);
     }
 
 }

@@ -1,83 +1,91 @@
 package net.masterthought.cucumber;
 
-import static net.masterthought.cucumber.FileReaderUtil.getAbsolutePathFromResource;
-import static org.hamcrest.core.Is.is;
-import static org.hamcrest.core.Is.isA;
-import static org.junit.Assert.assertThat;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.core.StringContains.containsString;
+import static org.hamcrest.core.StringEndsWith.endsWith;
 
-import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import net.masterthought.cucumber.json.Feature;
 
-public class ReportParserTest {
+/**
+ * @author Damian Szczepanik (damianszczepanik@github)
+ */
+public class ReportParserTest extends ReportGenerator {
+
+    @Rule
+    public ExpectedException thrown = ExpectedException.none();
 
     @Test
-    public void shouldReturnAListOfFeaturesFromAJsonReport() throws IOException {
-        List<Feature> features = new ReportParser().parseJsonResults(validJsonReports());
-        assertThat(features.size(), is(4));
-        assertThat(features.get(0), isA(Feature.class));
-        assertThat(features.get(2), isA(Feature.class));
-    }
+    public void parseJsonResults_ReturnsFeatureFiles() {
 
-    @Test
-    public void shouldContainFourFeatures() throws IOException {
-        List<Feature> features = new ReportParser().parseJsonResults(validJsonReports());
-        List<Feature> updatedFeatures = new ArrayList<Feature>();
-        updatedFeatures.addAll(features);
-        assertThat(updatedFeatures.size(), is(4));
-    }
+        // given
+        initWithJSon(SAMPLE_JSON, SIMPLE_JSON);
+        ReportParser reportParser = new ReportParser(configuration);
 
-    @Test
-    public void shouldProcessCucumberReportsWithNoSteps() throws IOException {
-        List<Feature> features = new ReportParser().parseJsonResults(withNoStepsInJsonReport());
-        assertThat(features.size(), is(4));
+        // when
+        List<Feature> features = reportParser.parseJsonFiles(jsonReports);
+
+        // then
+        assertThat(features).hasSize(3);
     }
 
     @Test
-    public void shouldProcessCucumberReportsWithNoSteps2() throws IOException {
-        List<Feature> features = new ReportParser().parseJsonResults(withNoSteps2InJsonReport());
-        ReportInformation reportInformation = new ReportInformation(features);
+    public void parseJsonResults_OnNoFeatures_ThrowsException() {
 
-        // Should not crash with NPE
-        assertThat(reportInformation.getAllFeatures().get(0), isA(Feature.class));
-        assertThat(features.size(), is(1));
+        // given
+        initWithJSon(EMPTY_JSON);
+        ReportParser reportParser = new ReportParser(configuration);
+
+        // when
+        thrown.expect(ValidationException.class);
+        thrown.expectMessage("Passed reports have no features!");
+        reportParser.parseJsonFiles(jsonReports);
     }
 
     @Test
-    public void shouldProcessCucumberReportsWithNoScenarios() throws IOException {
-        List<Feature> features = new ReportParser().parseJsonResults(withNoScenariosInJsonReport());
-        assertThat(features.size(), is(4));
+    public void parseJsonResults_OnNoReport_ThrowsException() {
+
+        // given
+        initWithJSon();
+        ReportParser reportParser = new ReportParser(configuration);
+
+        // then
+        thrown.expect(ValidationException.class);
+        thrown.expectMessage("None report file was added!");
+        reportParser.parseJsonFiles(jsonReports);
     }
 
-    private List<String> validJsonReports() {
-        List<String> jsonReports = new ArrayList<>();
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/project1.json"));
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/project2.json"));
-        return jsonReports;
+    @Test
+    public void parseJsonResults_OnInvalidReport_ThrowsException() {
+
+        // given
+        initWithJSon(INVALID_REPORT_JSON);
+        ReportParser reportParser = new ReportParser(configuration);
+
+        // when
+        thrown.expect(ValidationException.class);
+        thrown.expectMessage(endsWith("is not proper Cucumber report!"));
+        reportParser.parseJsonFiles(jsonReports);
     }
 
-    private List<String> withNoStepsInJsonReport() {
-        List<String> jsonReports = new ArrayList<>();
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/project1.json"));
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/nosteps.json"));
-        return jsonReports;
-    }
+    @Test
+    public void parseJsonResults_OnNoExistingFile_ThrowsException() {
 
-    private List<String> withNoSteps2InJsonReport() {
-        List<String> jsonReports = new ArrayList<>();
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/nosteps2.json"));
-        return jsonReports;
-    }
+        // given
+        final String invalidFile = "?no-existing%file.json";
+        initWithJSon(EMPTY_JSON);
+        jsonReports.add(invalidFile);
+        ReportParser reportParser = new ReportParser(configuration);
 
-    private List<String> withNoScenariosInJsonReport() {
-        List<String> jsonReports = new ArrayList<>();
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/project1.json"));
-        jsonReports.add(getAbsolutePathFromResource("net/masterthought/cucumber/noscenario.json"));
-        return jsonReports;
-    }
+        // then
+        thrown.expect(ValidationException.class);
+        thrown.expectMessage(containsString(invalidFile));
 
+        reportParser.parseJsonFiles(jsonReports);
+    }
 }

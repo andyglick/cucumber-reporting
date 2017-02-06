@@ -1,7 +1,10 @@
-target
-.idea
+target/
+.idea/
 .classpath
 .project
 .settings/
-cucumber-reporting.iml
 .DS_Store
+*.json
+*.iml
+*.ipr
+*.iws

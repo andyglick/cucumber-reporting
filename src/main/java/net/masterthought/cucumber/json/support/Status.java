@@ -1,41 +1,37 @@
 package net.masterthought.cucumber.json.support;
 
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+
+import net.masterthought.cucumber.json.deserializers.StatusDeserializer;
+
 /**
- * Defines all possible status provided by Cucumber.
+ * Defines all possible statuses provided by cucumber library.
  * 
  * @author Damian Szczepanik (damianszczepanik@github)
- *
  */
+@JsonDeserialize(using = StatusDeserializer.class)
 public enum Status {
 
-    // use RGB color instead of predefined such as blue, yellow!
-    PASSED("#00CE00"),
-    FAILED("#FF0000"),
-    SKIPPED("#88AAFF"),
-    PENDING("#FBB907"),
-    UNDEFINED("#FBB957"),
-    MISSING("#FBB9A7");
+    PASSED,
+    FAILED,
+    SKIPPED,
+    PENDING,
+    UNDEFINED;
 
-    /** Color representation for given status. */
-    public final String color;
-    
-    private Status(String color) {
-        this.color = color;
-    }
-    
-    /** Returns statuses in order they are displayed. */
-    public static Status[] getOrderedStatuses() {
-        return new Status[] {PASSED, FAILED, SKIPPED, PENDING, UNDEFINED, MISSING };
-    }
-
-    /** Returns name of the status as lower case characters. */
-    public String getName() {
+    /**
+     * Returns name of the status converted to lower case characters.
+     */
+    public String getRawName() {
         return name().toLowerCase();
     }
 
     /** Returns name of the status changing first letter to upper case character. */
     public String getLabel() {
-        return String.valueOf(name().charAt(0)).toUpperCase() + name().substring(1).toLowerCase();
+        return name().substring(0, 1).toUpperCase() + name().substring(1).toLowerCase();
     }
 
+    /** Returns true if status is equal to {@link #PASSED}. */
+    public boolean isPassed() {
+        return this == PASSED;
+    }
 }
